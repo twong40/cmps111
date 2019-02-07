@@ -357,34 +357,7 @@ runq_setbit(struct runq *rq, int pri)
 	    RQB_BIT(pri), RQB_WORD(pri));
 	rqb->rqb_bits[RQB_WORD(pri)] |= RQB_BIT(pri);
 }
-void lottery_add(struct runq *rq, struct thread *td){
-  struct rqhead * rqh;
-   int pri = 120;
-   runq_setbit(rq,pri);
-   rqh = &rq->rq_queues[pri];
-   TAILQ_INSERT_TAIL(rqh,td,td_runq);
-}
-struct thread * lottery_choose(struct runq *rq){
-  struct rqhead *rqh;
-  struct thread *td;
-  int pri = 120;
-  uint32_t total =0;
-  uint32_t winner=0;
-  uint32_t ticket=0;
-  rqh = &rq->rq_queues[pri];
-  TAILQ_FOREACH(td, rqh, td_runq){
-      total += td -> tickets;
-  }
-  winner = (uint32_t)random();
-	winner = winner % (total + 1);
-  TAILQ_FOREACH(td, rqh, td_runq){
-    if (ticket >= winner)
-      return (td);
-    ticket += td->tickets;
-  }
 
-  return (NULL);
-}
 /*
  * Add the thread to the queue specified by its priority, and set the
  * corresponding status bit.
@@ -424,6 +397,14 @@ runq_add_pri(struct runq *rq, struct thread *td, u_char pri, int flags)
 	} else {
 		TAILQ_INSERT_TAIL(rqh, td, td_runq);
 	}
+}
+//add the thread into queue 121, reserved for the lottery queue
+void lottery_add(struct runq *rq, struct thread *td){
+  struct rqhead *rqh;
+  td->td_rqindex = 30;
+  runq_setbit(rq,30);
+  rqh = &rq->rq_queues[30];
+  TAILQ_INSERT_TAIL(rqh,td,td_runq);
 }
 /*
  * Return true if there are runnable processes of any priority on the run
@@ -530,6 +511,28 @@ runq_choose_from(struct runq *rq, u_char idx)
 		return (td);
 	}
 	CTR1(KTR_RUNQ, "runq_choose_from: idlethread pri=%d", pri);
+
+	return (NULL);
+}
+//go to queue 121, iterate through the tickets to find the total,
+//get the random winner, iterate and find the winner and return
+struct thread * lottery_choose(struct runq *rq){
+  struct rqhead *rqh;
+  struct thread *td;
+  uint32_t win_ticket = 0;
+  uint32_t total_tickets = 0;
+  uint32_t tickets = 0;
+  rqh = &rq->rq_queues[30];
+  TAILQ_FOREACH(td, rqh, td_runq){
+  		total_tickets += td->tickets;
+  }
+  win_ticket = (uint32_t)random();
+	win_ticket = win_ticket % (total_tickets + 1);
+  TAILQ_FOREACH(td, rqh, td_runq){
+		if (tickets >= win_ticket)
+			return (td);
+		tickets += td->tickets;
+	}
 
 	return (NULL);
 }

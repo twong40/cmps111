@@ -138,8 +138,7 @@ _Static_assert(sizeof(struct thread) + sizeof(struct td_sched) <=
  * SCHED_TICK_MAX:	Maximum number of ticks before scaling back.
  * SCHED_TICK_SHIFT:	Shift factor to avoid rounding away results.
  * SCHED_TICK_HZ:	Compute the number of hz ticks for a given ticks count.
- * SCHED_TICK_TOTAL:	Gives the amount of time we'v
- e been recording ticks.
+ * SCHED_TICK_TOTAL:	Gives the amount of time we've been recording ticks.
  */
 #define	SCHED_TICK_SECS		10
 #define	SCHED_TICK_TARG		(hz * SCHED_TICK_SECS)
@@ -250,10 +249,12 @@ struct tdq {
 	struct runq	tdq_timeshare;		/* timeshare run queue. */
 	struct runq	tdq_idle;		/* Queue of IDLE threads. */
 	char		tdq_name[TDQ_NAME_LEN];
+	struct runq tdq_lottery;
 #ifdef KTR
 	char		tdq_loadname[TDQ_LOADNAME_LEN];
 #endif
 } __aligned(64);
+
 /* Idle thread states and config. */
 #define	TDQ_RUNNING	1
 #define	TDQ_IDLE	2
@@ -333,7 +334,7 @@ static struct mtx *sched_switch_migrate(struct tdq *, struct thread *, int);
 static int sysctl_kern_sched_topology_spec(SYSCTL_HANDLER_ARGS);
 static int sysctl_kern_sched_topology_spec_internal(struct sbuf *sb,
     struct cpu_group *cg, int indent);
-static void sched_adjust_tickets(struct thread *td, int score	);
+static void adjust_tickets(struct thread *td, int score);
 #endif
 
 static void sched_setup(void *dummy);
@@ -463,7 +464,10 @@ tdq_runq_add(struct tdq *tdq, struct thread *td, int flags)
 
 	TDQ_LOCK_ASSERT(tdq, MA_OWNED);
 	THREAD_LOCK_ASSERT(td, MA_OWNED);
-
+	if(!td->has_tickets){
+		td->tickets = 500;
+		td->has_tickets = true;
+	}
 	pri = td->td_priority;
 	ts = td_get_sched(td);
 	TD_SET_RUNQ(td);
@@ -471,37 +475,33 @@ tdq_runq_add(struct tdq *tdq, struct thread *td, int flags)
 		tdq->tdq_transferable++;
 		ts->ts_flags |= TSF_XFERABLE;
 	}
-	if(!td->hasTickets){
-		td->tickets = 500;
-		td->hasTickets = true;
-	}
 	if (pri < PRI_MIN_BATCH) {
 		ts->ts_runq = &tdq->tdq_realtime;
 	} else if (pri <= PRI_MAX_BATCH) {
-			ts->ts_runq = &tdq->tdq_timeshare;
+		ts->ts_runq = &tdq->tdq_timeshare;
+		KASSERT(pri <= PRI_MAX_BATCH && pri >= PRI_MIN_BATCH,
+			("Invalid priority %d on timeshare runq", pri));
 			lottery_add(ts->ts_runq, td);
-			KASSERT(pri <= PRI_MAX_BATCH && pri >= PRI_MIN_BATCH,
-				("Invalid priority %d on timeshare runq", pri));
-			/*
-			 * This queue contains only priorities between MIN and MAX
-			 * realtime.  Use the whole queue to represent these values.
-			 */
-			if ((flags & (SRQ_BORROWING|SRQ_PREEMPTED)) == 0) {
-				pri = RQ_NQS * (pri - PRI_MIN_BATCH) / PRI_BATCH_RANGE;
-				pri = (pri + tdq->tdq_idx) % RQ_NQS;
-				/*
-				 * This effectively shortens the queue by one so we
-				 * can have a one slot difference between idx and
-				 * ridx while we wait for threads to drain.
-				 */
-				if (tdq->tdq_ridx != tdq->tdq_idx &&
-				    pri == tdq->tdq_ridx)
-					pri = (unsigned char)(pri - 1) % RQ_NQS;
-		}else
-			pri = tdq->tdq_ridx;
-		runq_add_pri(ts->ts_runq, td, pri, flags);
-		return;
-
+			return;
+		/*
+		 * This queue contains only priorities between MIN and MAX
+		 * realtime.  Use the whole queue to represent these values.
+		//  */
+		// if ((flags & (SRQ_BORROWING|SRQ_PREEMPTED)) == 0) {
+		// 	pri = RQ_NQS * (pri - PRI_MIN_BATCH) / PRI_BATCH_RANGE;
+		// 	pri = (pri + tdq->tdq_idx) % RQ_NQS;
+		// 	/*
+		// 	 * This effectively shortens the queue by one so we
+		// 	 * can have a one slot difference between idx and
+		// 	 * ridx while we wait for threads to drain.
+		// 	 */
+		// 	if (tdq->tdq_ridx != tdq->tdq_idx &&
+		// 	    pri == tdq->tdq_ridx)
+		// 		pri = (unsigned char)(pri - 1) % RQ_NQS;
+		// 	} else
+		// 	pri = tdq->tdq_ridx;
+		// runq_add_pri(ts->ts_runq, td, pri, flags);
+		// return;
 	} else
 		ts->ts_runq = &tdq->tdq_idle;
 	runq_add(ts->ts_runq, td, flags);
@@ -1359,7 +1359,8 @@ tdq_choose(struct tdq *tdq)
 	td = runq_choose(&tdq->tdq_realtime);
 	if (td != NULL)
 		return (td);
-	td = lottery_choose(&tdq->tdq_timeshare);
+	td = runq_choose_from(&tdq->tdq_timeshare, tdq->tdq_ridx);
+		// td = lottery_choose(&tdq->tdq_timeshare);
 	if (td != NULL) {
 		KASSERT(td->td_priority >= PRI_MIN_BATCH,
 		    ("tdq_choose: Invalid priority on timeshare queue %d",
@@ -1389,6 +1390,7 @@ tdq_setup(struct tdq *tdq)
 	runq_init(&tdq->tdq_realtime);
 	runq_init(&tdq->tdq_timeshare);
 	runq_init(&tdq->tdq_idle);
+	runq_init(&tdq->tdq_lottery);
 	snprintf(tdq->tdq_name, sizeof(tdq->tdq_name),
 	    "sched lock %d", (int)TDQ_ID(tdq));
 	mtx_init(&tdq->tdq_lock, tdq->tdq_name, "sched lock",
@@ -1574,7 +1576,7 @@ sched_priority(struct thread *td)
 		KASSERT(pri >= PRI_MIN_INTERACT && pri <= PRI_MAX_INTERACT,
 		    ("sched_priority: invalid interactive priority %d score %d",
 		    pri, score));
-				sched_adjust_tickets(td,score);
+		adjust_tickets(td,score);
 	} else {
 		pri = SCHED_PRI_MIN;
 		if (td_get_sched(td)->ts_ticks)
@@ -2136,11 +2138,16 @@ sched_switch(struct thread *td, struct thread *newtd, int flags)
 	MPASS(td->td_lock == TDQ_LOCKPTR(tdq));
 	td->td_oncpu = cpuid;
 }
-static void sched_adjust_tickets(struct thread *td, int nice_value){
-		int new_tickets = td->tickets + 25*nice_value;
-		if(new_tickets < 1) new_tickets = 1;
-		else if (new_tickets >5000) new_tickets = 1000;
-		td->tickets = new_tickets;
+//Adjust number of tickets per thread
+static void adjust_tickets(struct thread *td, int score){
+	int new_tickets;
+	if(score < 0){
+		new_tickets = td->tickets - 25*(score);
+	}
+	else{
+		new_tickets = td->tickets - 25*(score);
+	}
+	td->tickets = new_tickets;
 }
 /*
  * Adjust thread priorities as a result of a nice request.
@@ -2157,7 +2164,7 @@ sched_nice(struct proc *p, int nice)
 		thread_lock(td);
 		sched_priority(td);
 		sched_prio(td, td->td_base_user_pri);
-		sched_adjust_tickets(td,nice);
+		adjust_tickets(td,nice);
 		thread_unlock(td);
 	}
 }
