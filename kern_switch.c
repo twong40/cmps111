@@ -393,7 +393,7 @@ runq_add_pri(struct runq *rq, struct thread *td, u_char pri, int flags)
 	CTR4(KTR_RUNQ, "runq_add_pri: td=%p pri=%d idx=%d rqh=%p",
 	    td, td->td_priority, pri, rqh);
 	if (flags & SRQ_PREEMPTED) {
-		TAILQ_INSERT_HEAD(rqh, td, td_runq);
+		TAILQ_INSERT_HEAD(rqh, td, td_runq);;
 	} else {
 		TAILQ_INSERT_TAIL(rqh, td, td_runq);
 	}
@@ -401,10 +401,25 @@ runq_add_pri(struct runq *rq, struct thread *td, u_char pri, int flags)
 //add the thread into queue 121, reserved for the lottery queue
 void lottery_add(struct runq *rq, struct thread *td){
   struct rqhead *rqh;
+  uint32_t smallest = 500;
+  uint32_t largest = 0;
+  uint32_t size = 0;
+  uint32_t total = 0;
   td->td_rqindex = 30;
   runq_setbit(rq,30);
   rqh = &rq->rq_queues[30];
   TAILQ_INSERT_TAIL(rqh,td,td_runq);
+  TAILQ_FOREACH(td, rqh, td_runq){
+      total += td->tickets;
+      size += 1;
+      if(td->tickets > largest) largest = td->tickets;
+      if(td->tickets < smallest) smallest = td->tickets;
+  }
+  // printf("\nAdding a thread with 500 tickets. \n");
+  // printf("The total size of the queue is %lu .\n" ,(unsigned long)size);
+  // printf("The largest number of tickets is %lu .\n",(unsigned long)largest);
+  // printf("The smallest number of tickets is %lu .\n",(unsigned long)smallest);
+  // printf("The total number of tickets is %lu .\n",(unsigned long)total);
 }
 /*
  * Return true if there are runnable processes of any priority on the run
@@ -522,12 +537,23 @@ struct thread * lottery_choose(struct runq *rq){
   uint32_t win_ticket = 0;
   uint32_t total_tickets = 0;
   uint32_t tickets = 0;
+  uint32_t size = 0;
+  uint32_t largest = 0;
+  uint32_t smallest = 500;
   rqh = &rq->rq_queues[30];
   TAILQ_FOREACH(td, rqh, td_runq){
   		total_tickets += td->tickets;
+      size += 1;
+      if(td->tickets > largest) largest = td->tickets;
+      if(td->tickets < smallest) smallest = td->tickets;
   }
   win_ticket = (uint32_t)random();
 	win_ticket = win_ticket % (total_tickets + 1);
+  // printf("\nPicking a thread. \n");
+  // printf("The total size of the queue is %lu .\n" ,(unsigned long)size);
+  // printf("The largest number of tickets is %lu .\n",(unsigned long)largest);
+  // printf("The smallest number of tickets is %lu .\n",(unsigned long)smallest);
+  // printf("The total number of tickets is %lu .\n",(unsigned long)total_tickets);
   TAILQ_FOREACH(td, rqh, td_runq){
 		if (tickets >= win_ticket)
 			return (td);

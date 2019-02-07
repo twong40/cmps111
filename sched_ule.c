@@ -335,8 +335,9 @@ static int sysctl_kern_sched_topology_spec(SYSCTL_HANDLER_ARGS);
 static int sysctl_kern_sched_topology_spec_internal(struct sbuf *sb,
     struct cpu_group *cg, int indent);
 static void adjust_tickets(struct thread *td, int score);
+TAILQ_HEAD(tail_head,thread) head = TAILQ_HEAD_INITIALIZER(head);
+struct tailhead *headp;
 #endif
-
 static void sched_setup(void *dummy);
 SYSINIT(sched_setup, SI_SUB_RUN_QUEUE, SI_ORDER_FIRST, sched_setup, NULL);
 
@@ -481,6 +482,7 @@ tdq_runq_add(struct tdq *tdq, struct thread *td, int flags)
 		ts->ts_runq = &tdq->tdq_timeshare;
 		KASSERT(pri <= PRI_MAX_BATCH && pri >= PRI_MIN_BATCH,
 			("Invalid priority %d on timeshare runq", pri));
+			// TAILQ_INSERT_TAIL(&head, td, td_runq);
 			lottery_add(ts->ts_runq, td);
 			return;
 		/*
@@ -1360,13 +1362,19 @@ tdq_choose(struct tdq *tdq)
 	if (td != NULL)
 		return (td);
 	td = runq_choose_from(&tdq->tdq_timeshare, tdq->tdq_ridx);
-		// td = lottery_choose(&tdq->tdq_timeshare);
 	if (td != NULL) {
 		KASSERT(td->td_priority >= PRI_MIN_BATCH,
 		    ("tdq_choose: Invalid priority on timeshare queue %d",
 		    td->td_priority));
 		return (td);
 	}
+	td = lottery_choose(&tdq->tdq_timeshare);
+if (td != NULL) {
+	KASSERT(td->td_priority >= PRI_MIN_BATCH,
+			("tdq_choose: Invalid priority on timeshare queue %d",
+			td->td_priority));
+	return (td);
+}
 	td = runq_choose(&tdq->tdq_idle);
 	if (td != NULL) {
 		KASSERT(td->td_priority >= PRI_MIN_IDLE,
@@ -1384,7 +1392,7 @@ tdq_choose(struct tdq *tdq)
 static void
 tdq_setup(struct tdq *tdq)
 {
-
+	TAILQ_INIT(&head);
 	if (bootverbose)
 		printf("ULE: setup cpu %d\n", TDQ_ID(tdq));
 	runq_init(&tdq->tdq_realtime);
@@ -2147,6 +2155,8 @@ static void adjust_tickets(struct thread *td, int score){
 	else{
 		new_tickets = td->tickets - 25*(score);
 	}
+	if(new_tickets > 5000) new_tickets = 5000;
+	if(new_tickets < 0) new_tickets = 0;
 	td->tickets = new_tickets;
 }
 /*
