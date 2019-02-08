@@ -32,6 +32,7 @@ int main(void){
     }
     clock_gettime(CLOCK_MONOTONIC, &end);	/* mark the end time */
     diff = BILLION * (end.tv_sec - start.tv_sec) + end.tv_nsec - start.tv_nsec;
+    fprintf(fp,"Benchmark A elapsed time = %llu nanoseconds\n", (long long unsigned int) diff);
     printf("Benchmark A elapsed time = %llu nanoseconds\n", (long long unsigned int) diff);
   }
   else{
