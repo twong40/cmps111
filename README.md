@@ -10,3 +10,10 @@ HOW TO COMPILE AND RUN BENCHMARK
 (6) Go to benchmark directory
 (7) make
 (8) ./ benchmark
+
+
+
+TO RUN BENCHMARK
+(1)type "make"
+(2)type "./benchmark-A & ./benchmark-B &"
+(3)time in nanoseconds for each will print
