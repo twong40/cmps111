@@ -1123,15 +1123,15 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
 	pq = &vmd->vmd_pagequeues[PQ_INACTIVE];
 	maxscan = pq->pq_cnt;
   //print out stats
-  uint32_t current_time;
+  long current_time;
   struct timeval time_now;
   microtime(&time_now);
   current_time = (time_now.tv_sec * 1000000) + time_now.tv_usec;
   log(1, "Total pages in FIFO queue: %d\n", vm_cnt.v_inactive_count);
   m = TAILQ_FIRST(&pq->pq_pl);
-  //long head_time = (long)(current_time-(m->ms));
-  log(1, "Head of the FIFO queue is %ld microseconds old\n",(long)(m->ms));
-  log(1, "Tail of the FIFO queue is %ld microseconds old\n",(long)current_time);
+  // long head_time = current_time-(m->ms);
+  log(1, "Head of the FIFO queue is %ld microseconds old\n",m->ms);
+  // log(1, "Tail of the FIFO queue is %ld microseconds old\n",(long)current_time);
 
 	vm_pagequeue_lock(pq);
 	queue_locked = TRUE;

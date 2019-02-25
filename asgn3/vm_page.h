@@ -158,7 +158,7 @@ struct vm_page {
 	/* so, on normal X86 kernels, they must be at least 8 bits wide */
 	vm_page_bits_t valid;		/* map of valid DEV_BSIZE chunks (O) */
 	vm_page_bits_t dirty;		/* map of dirty DEV_BSIZE chunks (M) */
-	uint32_t        ms; // Milliseconds
+	long        ms; // Milliseconds
 };
 
 /*

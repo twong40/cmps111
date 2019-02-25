@@ -2726,11 +2726,11 @@ vm_page_enqueue(uint8_t queue, vm_page_t m)
 	vm_page_lock_assert(m, MA_OWNED);
   struct timeval time_now;
   microtime(&time_now);
-  uint32_t new_time;
+  long new_time;
   new_time = (time_now.tv_sec * 1000000) + time_now.tv_usec;
   //log(1,"%ld secs, %ld usecs\n",time_now.tv_sec,time_now.tv_usec);
   m->ms = new_time;
-  log(1,"Checking ms value %ld\n", (long)(m->ms));
+  log(1,"Checking ms value %ld\n", m->ms);
 	KASSERT(queue < PQ_COUNT,
 	    ("vm_page_enqueue: invalid queue %u request for page %p",
 	    queue, m));
@@ -3089,13 +3089,13 @@ _vm_page_deactivate(vm_page_t m, boolean_t noreuse)
 
 	vm_page_assert_locked(m);
   //create a new timespec object and enter the nanoup time and set ito the page->ns;
-  struct timeval time_now;
-  microtime(&time_now);
-  uint32_t new_time;
-  new_time = (time_now.tv_sec * 1000000) + time_now.tv_usec;
+  // struct timeval time_now;
+  // microtime(&time_now);
+  // uint32_t new_time;
+  // new_time = (time_now.tv_sec * 1000000) + time_now.tv_usec;
   //log(1,"%ld secs, %ld usecs\n",time_now.tv_sec,time_now.tv_usec);
   //log(1,"Time of new page entry: %ld  microseconds\n", (long)new_time);
-  m->ms = new_time;
+  // m->ms = new_time;
 	/*
 	 * Ignore if the page is already inactive, unless it is unlikely to be
 	 * reactivated.
