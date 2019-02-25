@@ -1141,7 +1141,6 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
 		vm_pagequeue_assert_locked(pq);
 		KASSERT(queue_locked, ("unlocked inactive queue"));
 		KASSERT(vm_page_inactive(m), ("Inactive queue %p", m));
-
 		PCPU_INC(cnt.v_pdpages);
 		next = TAILQ_NEXT(m, plinks.q);
 		/*
@@ -1853,7 +1852,7 @@ vm_pageout_init(void)
 	 * case paging behaviors with stale active LRU.
 	 */
 	if (vm_pageout_update_period == 0)
-		vm_pageout_update_period = 600;
+		vm_pageout_update_period = 10;
 
 	/* XXX does not really belong here */
 	if (vm_page_max_wired == 0)
