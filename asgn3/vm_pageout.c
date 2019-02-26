@@ -1122,6 +1122,10 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
 	 */
 	pq = &vmd->vmd_pagequeues[PQ_INACTIVE];
 	maxscan = pq->pq_cnt;
+
+	vm_pagequeue_lock(pq);
+	queue_locked = TRUE;
+
   //print out stats
   long current_time;
   struct timeval time_now;
@@ -1133,8 +1137,6 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
   log(1, "Head of the FIFO queue is %ld microseconds old\n",m->ms);
   // log(1, "Tail of the FIFO queue is %ld microseconds old\n",(long)current_time);
 
-	vm_pagequeue_lock(pq);
-	queue_locked = TRUE;
 	for (m = TAILQ_FIRST(&pq->pq_pl);
 	     m != NULL && maxscan-- > 0 && page_shortage > 0;
 	     m = next) {
@@ -1146,13 +1148,13 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
 		/*
 		 * skip marker pages
 		 */
-		// if (m->flags & PG_MARKER)
-		// 	continue;
-    //
-		// KASSERT((m->flags & PG_FICTITIOUS) == 0,
-		//     ("Fictitious page %p cannot be in inactive queue", m));
-		// KASSERT((m->oflags & VPO_UNMANAGED) == 0,
-		//     ("Unmanaged page %p cannot be in inactive queue", m));
+		if (m->flags & PG_MARKER)
+			continue;
+
+		KASSERT((m->flags & PG_FICTITIOUS) == 0,
+		    ("Fictitious page %p cannot be in inactive queue", m));
+		KASSERT((m->oflags & VPO_UNMANAGED) == 0,
+		    ("Unmanaged page %p cannot be in inactive queue", m));
 
 		/*
 		 * The page or object lock acquisitions fail if the
@@ -1160,9 +1162,9 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
 		 * different position within the queue.  In either
 		 * case, addl_page_shortage should not be incremented.
 		 */
-		// if (!vm_pageout_page_lock(m, &next))
-		// 	goto unlock_page;
-		// else if (m->hold_count != 0) {
+		if (!vm_pageout_page_lock(m, &next))
+			goto unlock_page;
+		else if (m->hold_count != 0) {
 			/*
 			 * Held pages are essentially stuck in the
 			 * queue.  So, they ought to be discounted
@@ -1170,21 +1172,21 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
 			 * calculation of inactq_shortage before the
 			 * loop over the active queue below.
 			 */
-		// 	addl_page_shortage++;
-		// 	goto unlock_page;
-		// }
+			addl_page_shortage++;
+			goto unlock_page;
+		}
 		object = m->object;
-		// if (!VM_OBJECT_TRYWLOCK(object)) {
-		// 	if (!vm_pageout_fallback_object_lock(m, &next))
-		// 		goto unlock_object;
-		// 	else if (m->hold_count != 0) {
-		// 		addl_page_shortage++;
-		// 		goto unlock_object;
-		// 	}
-		// }
+		if (!VM_OBJECT_TRYWLOCK(object)) {
+			if (!vm_pageout_fallback_object_lock(m, &next))
+				goto unlock_object;
+			else if (m->hold_count != 0) {
+				addl_page_shortage++;
+				goto unlock_object;
+			}
+		}
     //DONT NEED THIS PART FOR BUSY SINCE WE STRICTLY DELETE THE HEAD
 
-		// if (vm_page_busied(m)) {
+		if (vm_page_busied(m)) {
 			/*
 			 * Don't mess with busy pages.  Leave them at
 			 * the front of the queue.  Most likely, they
@@ -1193,14 +1195,14 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
 			 * they ought to be discounted from the
 			 * inactive count.
 // 			 */
-// 			addl_page_shortage++;
-// unlock_object:
-// 			VM_OBJECT_WUNLOCK(object);
-// unlock_page:
-// 			vm_page_unlock(m);
-// 			continue;
-// 		}
-// 		KASSERT(m->hold_count == 0, ("Held page %p", m));
+			addl_page_shortage++;
+unlock_object:
+			VM_OBJECT_WUNLOCK(object);
+unlock_page:
+			vm_page_unlock(m);
+			continue;
+		}
+		KASSERT(m->hold_count == 0, ("Held page %p", m));
 
     //----------------------------------------------------------------
 		/*
@@ -1233,21 +1235,21 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
 		 */
     //DONT NEED THIS SINCE FIFO DOES NOT CARE ABOUT REFERENCED OR NOT
 
-		if ((m->aflags & PGA_REFERENCED) != 0) {
-			vm_page_aflag_clear(m, PGA_REFERENCED);
-			act_delta = 1;
-		} else
-			act_delta = 0;
-		if (object->ref_count != 0) {
-			act_delta += pmap_ts_referenced(m);
-		} else {
-			KASSERT(!pmap_page_is_mapped(m),
-			    ("vm_pageout_scan: page %p is mapped", m));
-		}
-		if (act_delta != 0) {
-			if (object->ref_count != 0) {
-				PCPU_INC(cnt.v_reactivated);
-				vm_page_deactivate(m);
+		// if ((m->aflags & PGA_REFERENCED) != 0) {
+		// 	vm_page_aflag_clear(m, PGA_REFERENCED);
+		// 	act_delta = 1;
+		// } else
+		// 	act_delta = 0;
+		// if (object->ref_count != 0) {
+		// 	act_delta += pmap_ts_referenced(m);
+		// } else {
+		// 	KASSERT(!pmap_page_is_mapped(m),
+		// 	    ("vm_pageout_scan: page %p is mapped", m));
+		// }
+		// if (act_delta != 0) {
+		// 	if (object->ref_count != 0) {
+		// 		PCPU_INC(cnt.v_reactivated);
+		// 		vm_page_deactivate(m);
 
 				/*
 				 * Increase the activation count if the page
@@ -1256,17 +1258,17 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
 				 * be returned prematurely to the inactive
 				 * queue.
  				 */
-				m->act_count += act_delta + ACT_ADVANCE;
-				goto drop_page;
-			} else if ((object->flags & OBJ_DEAD) == 0) {
-				vm_pagequeue_lock(pq);
-				queue_locked = TRUE;
-				m->queue = PQ_INACTIVE;
-				TAILQ_INSERT_TAIL(&pq->pq_pl, m, plinks.q);
-				vm_pagequeue_cnt_inc(pq);
-				goto drop_page;
-			}
-		}
+		// 		m->act_count += act_delta + ACT_ADVANCE;
+		// 		goto drop_page;
+		// 	} else if ((object->flags & OBJ_DEAD) == 0) {
+		// 		vm_pagequeue_lock(pq);
+		// 		queue_locked = TRUE;
+		// 		m->queue = PQ_INACTIVE;
+		// 		TAILQ_INSERT_TAIL(&pq->pq_pl, m, plinks.q);
+		// 		vm_pagequeue_cnt_inc(pq);
+		// 		goto drop_page;
+		// 	}
+		// }
     //-----------------------------------------------------------
 
 		/*
@@ -1297,15 +1299,15 @@ free_page:
 			--page_shortage;
 		} else if ((object->flags & OBJ_DEAD) == 0)
 			vm_page_launder(m);
-drop_page:
-		vm_page_unlock(m);
-		VM_OBJECT_WUNLOCK(object);
-		if (!queue_locked) {
-			vm_pagequeue_lock(pq);
-			queue_locked = TRUE;
-		}
-		next = TAILQ_NEXT(&vmd->vmd_marker, plinks.q);
-		TAILQ_REMOVE(&pq->pq_pl, &vmd->vmd_marker, plinks.q);
+// drop_page:
+// 		vm_page_unlock(m);
+// 		VM_OBJECT_WUNLOCK(object);
+// 		if (!queue_locked) {
+// 			vm_pagequeue_lock(pq);
+// 			queue_locked = TRUE;
+// 		}
+// 		next = TAILQ_NEXT(&vmd->vmd_marker, plinks.q);
+// 		TAILQ_REMOVE(&pq->pq_pl, &vmd->vmd_marker, plinks.q);
 	}
 	vm_pagequeue_unlock(pq);
 
