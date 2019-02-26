@@ -1123,19 +1123,29 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
 	pq = &vmd->vmd_pagequeues[PQ_INACTIVE];
 	maxscan = pq->pq_cnt;
 
-	vm_pagequeue_lock(pq);
-	queue_locked = TRUE;
-
   //print out stats
-  long current_time;
-  struct timeval time_now;
-  microtime(&time_now);
-  current_time = (time_now.tv_sec * 1000000) + time_now.tv_usec;
-  log(1, "Total pages in FIFO queue: %d\n", vm_cnt.v_inactive_count);
-  m = TAILQ_FIRST(&pq->pq_pl);
-  // long head_time = current_time-(m->ms);
-  log(1, "Head of the FIFO queue is %ld microseconds old\n",m->ms);
-  // log(1, "Tail of the FIFO queue is %ld microseconds old\n",(long)current_time);
+    long current_time;
+    struct timeval time_now;
+    microtime(&time_now);
+    current_time = (time_now.tv_sec * 1000000) + time_now.tv_usec;
+    log(1, "Total pages in FIFO queue: %d\n", vm_cnt.v_inactive_count);
+  	vm_pagequeue_lock(pq);
+  	queue_locked = TRUE;
+
+    m = TAILQ_FIRST(&pq->pq_pl);
+    // log(1, "Head of the FIFO queue is %ld microseconds old\n", m->ms);
+    int first = 1;
+    for (m = TAILQ_FIRST(&pq->pq_pl); m != NULL ; m = next) {
+      if(first){
+        log(1, "Head of the FIFO queue is %ld microseconds old\n", (current_time-(m->ms)));
+        first = 0;
+      }
+      next = TAILQ_NEXT(m, plinks.q);
+      if(next == NULL){
+        break;
+      }
+    }
+    log(1, "Tail of the FIFO queue is %ld microseconds old\n", (current_time-(m->ms)));
 
 	for (m = TAILQ_FIRST(&pq->pq_pl);
 	     m != NULL && maxscan-- > 0 && page_shortage > 0;
