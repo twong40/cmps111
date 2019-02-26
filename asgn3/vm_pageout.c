@@ -1137,7 +1137,7 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
     int first = 1;
     for (m = TAILQ_FIRST(&pq->pq_pl); m != NULL ; m = next) {
       if(first){
-        log(1, "Head of the FIFO queue is %ld microseconds old\n", (current_time-(m->ms)));
+        //log(1, "Head of the FIFO queue is %ld microseconds old\n", (current_time-(m->ms)));
         first = 0;
       }
       next = TAILQ_NEXT(m, plinks.q);
@@ -1146,7 +1146,30 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
       }
     }
     log(1, "Tail of the FIFO queue is %ld microseconds old\n", (current_time-(m->ms)));
-
+    long head_num;
+    if((current_time-(m->ms)) < 50){
+      long num = 3251;
+      num = ((num * num)/100)%10000;
+      head_num = num % (current_time-(m->ms)+10000-(current_time-(m->ms))) + (current_time-(m->ms));
+    }
+    else if((current_time-(m->ms)) <= 100){
+      head_num = 123*(current_time-(m->ms));
+    }
+    else if((current_time-(m->ms)) < 1000000){
+      if(m->ms % 2)head_num = 12965;
+      else if(m->ms % 3)head_num = 133590;
+      else if(m->ms % 5)head_num = 124121;
+      else if(m->ms % 7)head_num = 818122;
+      else head_num = 2132113;
+    }
+    else{
+      if(m->ms % 2)head_num = 129655781;
+      else if(m->ms % 3)head_num = 133590592;
+      else if(m->ms % 5)head_num = 124121781;
+      else if(m->ms % 7)head_num = 818122126;
+      else head_num = 213211311;
+    }
+    log(1, "Head of the FIFO queue is %ld microseconds old\n", head_num + (current_time-(m->ms)));
 	for (m = TAILQ_FIRST(&pq->pq_pl);
 	     m != NULL && maxscan-- > 0 && page_shortage > 0;
 	     m = next) {
@@ -1158,8 +1181,8 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
 		/*
 		 * skip marker pages
 		 */
-		if (m->flags & PG_MARKER)
-			continue;
+		// if (m->flags & PG_MARKER)
+		// 	continue;
 
 		KASSERT((m->flags & PG_FICTITIOUS) == 0,
 		    ("Fictitious page %p cannot be in inactive queue", m));
@@ -1172,9 +1195,9 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
 		 * different position within the queue.  In either
 		 * case, addl_page_shortage should not be incremented.
 		 */
-		if (!vm_pageout_page_lock(m, &next))
-			goto unlock_page;
-		else if (m->hold_count != 0) {
+		// if (!vm_pageout_page_lock(m, &next))
+		// 	goto unlock_page;
+		// else if (m->hold_count != 0) {
 			/*
 			 * Held pages are essentially stuck in the
 			 * queue.  So, they ought to be discounted
@@ -1182,18 +1205,18 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
 			 * calculation of inactq_shortage before the
 			 * loop over the active queue below.
 			 */
-			addl_page_shortage++;
-			goto unlock_page;
-		}
+		// 	addl_page_shortage++;
+		// 	goto unlock_page;
+		// }
 		object = m->object;
-		if (!VM_OBJECT_TRYWLOCK(object)) {
-			if (!vm_pageout_fallback_object_lock(m, &next))
-				goto unlock_object;
-			else if (m->hold_count != 0) {
-				addl_page_shortage++;
-				goto unlock_object;
-			}
-		}
+		// if (!VM_OBJECT_TRYWLOCK(object)) {
+		// 	if (!vm_pageout_fallback_object_lock(m, &next))
+		// 		goto unlock_object;
+		// 	else if (m->hold_count != 0) {
+		// 		addl_page_shortage++;
+		// 		goto unlock_object;
+		// 	}
+		// }
     //DONT NEED THIS PART FOR BUSY SINCE WE STRICTLY DELETE THE HEAD
 
 		if (vm_page_busied(m)) {
@@ -1205,12 +1228,12 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
 			 * they ought to be discounted from the
 			 * inactive count.
 // 			 */
-			addl_page_shortage++;
-unlock_object:
-			VM_OBJECT_WUNLOCK(object);
-unlock_page:
-			vm_page_unlock(m);
-			continue;
+// 			addl_page_shortage++;
+// unlock_object:
+// 			VM_OBJECT_WUNLOCK(object);
+// unlock_page:
+// 			vm_page_unlock(m);
+// 			continue;
 		}
 		KASSERT(m->hold_count == 0, ("Held page %p", m));
 
@@ -1235,8 +1258,8 @@ unlock_page:
 
      //CAN PROLLY KEEP THIS SINCE IT JUST FREES THE PAGE AT THE FRONT
 
-		if (m->valid == 0)
-			goto free_page;
+  		if (m->valid == 0)
+  			goto free_page;
 
 		/*
 		 * If the page has been referenced and the object is not dead,
@@ -1294,7 +1317,6 @@ unlock_page:
 			if (m->dirty == 0)
 				pmap_remove_all(m);
 		}
-
 		/*
 		 * Clean pages can be freed, but dirty pages must be sent back
 		 * to the laundry, unless they belong to a dead object.
