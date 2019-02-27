@@ -1133,19 +1133,18 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
 	queue_locked = TRUE;
 
   m = TAILQ_FIRST(&pq->pq_pl);
-  // log(1, "Head of the FIFO queue is %ld microseconds old\n", m->ms);
   int first = 1;
   for (m = TAILQ_FIRST(&pq->pq_pl); m != NULL ; m = next) {
-    if(first){
-      log(1, "Head of the FIFO queue is %ld microseconds old\n", (current_time-(m->ms)));
+    next = TAILQ_NEXT(m, plinks.q);
+    if(first == 1 && !(vm_page_busied(m))){
+      log(1, "Head of the FIFO queue is %ld microseconds old\n", (current_time - (m->ms)));
       first = 0;
     }
-    next = TAILQ_NEXT(m, plinks.q);
     if(next == NULL){
       break;
     }
   }
-  log(1, "Tail of the FIFO queue is %ld microseconds old\n", (current_time-(m->ms)));
+  log(1, "Tail of the FIFO queue is %ld microseconds old\n", (current_time - (m->ms)));
 
 	for (m = TAILQ_FIRST(&pq->pq_pl);
 	     m != NULL && maxscan-- > 0 && page_shortage > 0;
@@ -1156,11 +1155,11 @@ vm_pageout_scan(struct vm_domain *vmd, int pass)
 		PCPU_INC(cnt.v_pdpages);
 		next = TAILQ_NEXT(m, plinks.q);
 
-		/*
-		 * skip marker pages
-		 */
-		if (m->flags & PG_MARKER)
-			continue;
+		// /*
+		//  * skip marker pages
+		//  */
+		// if (m->flags & PG_MARKER)
+		// 	continue;
 
 		KASSERT((m->flags & PG_FICTITIOUS) == 0,
 		    ("Fictitious page %p cannot be in inactive queue", m));
@@ -1223,6 +1222,7 @@ unlock_page:
 		 * vm_page_free(), or vm_page_launder() is called.  Use a
 		 * marker to remember our place in the inactive queue.
 		 */
+
 		TAILQ_INSERT_AFTER(&pq->pq_pl, m, &vmd->vmd_marker, plinks.q);
 		vm_page_dequeue_locked(m);
 		vm_pagequeue_unlock(pq);
@@ -1236,11 +1236,14 @@ unlock_page:
 		if (m->valid == 0)
 			goto free_page;
 
+    goto clean_page;
+
 		/*
 		 * If the page has been referenced and the object is not dead,
 		 * reactivate or requeue the page depending on whether the
 		 * object is mapped.
 		 */
+     log(1, "REACHED");
 
 		if ((m->aflags & PGA_REFERENCED) != 0) {
 			vm_page_aflag_clear(m, PGA_REFERENCED);
@@ -1276,7 +1279,7 @@ unlock_page:
 				goto drop_page;
 			}
 		}
-    //-----------------------------------------------------------
+    // -----------------------------------------------------------
 
 		/*
 		 * If the page appears to be clean at the machine-independent
@@ -1285,7 +1288,8 @@ unlock_page:
 		 * mappings allow write access, then the page may still be
 		 * modified until the last of those mappings are removed.
 		 */
-
+     log(1, "REACHED");
+clean_page:
 		if (object->ref_count != 0) {
 			vm_page_test_dirty(m);
 			if (m->dirty == 0)
@@ -1375,12 +1379,12 @@ drop_page:
 	 * active page within 'update_period' seconds.
 	 */
 	scan_tick = ticks;
-	if (vm_pageout_update_period != 0) {
-		min_scan = pq->pq_cnt;
-		min_scan *= scan_tick - vmd->vmd_last_active_scan;
-		min_scan /= hz * vm_pageout_update_period;
-	} else
-		min_scan = 0;
+	// if (vm_pageout_update_period != 0) {
+	// 	min_scan = pq->pq_cnt;
+	// 	min_scan *= scan_tick - vmd->vmd_last_active_scan;
+	// 	min_scan /= hz * vm_pageout_update_period;
+	// } else
+	min_scan = 0;
 	if (min_scan > 0 || (inactq_shortage > 0 && maxscan > 0))
 		vmd->vmd_last_active_scan = scan_tick;
 
@@ -1447,47 +1451,51 @@ drop_page:
 		} else
 			m->act_count -= min(m->act_count, ACT_DECLINE);
 
-		/*
-		 * Move this page to the tail of the active, inactive or laundry
-		 * queue depending on usage.
-		 */
-		if (m->act_count == 0) {
-			/* Dequeue to avoid later lock recursion. */
-			vm_page_dequeue_locked(m);
+		// /*
+		//  * Move this page to the tail of the active, inactive or laundry
+		//  * queue depending on usage.
+		//  */
+		// if (m->act_count == 0) {
+		// 	/* Dequeue to avoid later lock recursion. */
+		// 	vm_page_dequeue_locked(m);
+    //
+		// 	/*
+		// 	 * When not short for inactive pages, let dirty pages go
+		// 	 * through the inactive queue before moving to the
+		// 	 * laundry queues.  This gives them some extra time to
+		// 	 * be reactivated, potentially avoiding an expensive
+		// 	 * pageout.  During a page shortage, the inactive queue
+		// 	 * is necessarily small, so we may move dirty pages
+		// 	 * directly to the laundry queue.
+		// 	 */
+		// 	if (inactq_shortage <= 0)
+		// 		vm_page_deactivate(m);
+		// 	else {
+		// 		/*
+		// 		 * Calling vm_page_test_dirty() here would
+		// 		 * require acquisition of the object's write
+		// 		 * lock.  However, during a page shortage,
+		// 		 * directing dirty pages into the laundry
+		// 		 * queue is only an optimization and not a
+		// 		 * requirement.  Therefore, we simply rely on
+		// 		 * the opportunistic updates to the page's
+		// 		 * dirty field by the pmap.
+		// 		 */
+		// 		if (m->dirty == 0) {
+		// 			vm_page_deactivate(m);
+		// 			inactq_shortage -=
+		// 			    act_scan_laundry_weight;
+		// 		} else {
+		// 			vm_page_launder(m);
+		// 			inactq_shortage--;
+		// 		}
+		// 	}
+		// } else
+		// 	vm_page_requeue_locked(m);
 
-			/*
-			 * When not short for inactive pages, let dirty pages go
-			 * through the inactive queue before moving to the
-			 * laundry queues.  This gives them some extra time to
-			 * be reactivated, potentially avoiding an expensive
-			 * pageout.  During a page shortage, the inactive queue
-			 * is necessarily small, so we may move dirty pages
-			 * directly to the laundry queue.
-			 */
-			if (inactq_shortage <= 0)
-				vm_page_deactivate(m);
-			else {
-				/*
-				 * Calling vm_page_test_dirty() here would
-				 * require acquisition of the object's write
-				 * lock.  However, during a page shortage,
-				 * directing dirty pages into the laundry
-				 * queue is only an optimization and not a
-				 * requirement.  Therefore, we simply rely on
-				 * the opportunistic updates to the page's
-				 * dirty field by the pmap.
-				 */
-				if (m->dirty == 0) {
-					vm_page_deactivate(m);
-					inactq_shortage -=
-					    act_scan_laundry_weight;
-				} else {
-					vm_page_launder(m);
-					inactq_shortage--;
-				}
-			}
-		} else
-			vm_page_requeue_locked(m);
+    vm_page_dequeue_locked(m);
+    vm_page_deactivate(m);
+
 		vm_page_unlock(m);
 	}
 	vm_pagequeue_unlock(pq);
