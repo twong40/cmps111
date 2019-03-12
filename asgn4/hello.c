@@ -31,6 +31,8 @@ static const char *hello_path = "/hello";
 
 static int hello_getattr(const char *path, struct stat *stbuf)
 {
+	printf( "getattr called\n" );
+	printf( "\tAttributes of %s requested\n", path );
 	int res = 0;
 
 	memset(stbuf, 0, sizeof(struct stat));
@@ -102,6 +104,6 @@ static struct fuse_operations hello_oper = {
 
 int main(int argc, char *argv[])
 {
-	printf("AOFS started on new directory\n")
+	printf("AOFS started on new directory\n");
 	return fuse_main(argc, argv, &hello_oper, NULL);
 }

@@ -27,15 +27,17 @@ int main(int argc, char *argv[])
       printf("the file has %ld bytes\n", (long) st.st_size);
       close(file_descriptor);
 			//adds the magic number, backwards to make hexdump print correctly?
-			// long magic[4] = {0xfa19283e};
-      long* magic = 0x3e2819fa;
+      int magic[4] = {0x3e2819fa};
+      //create bitmap of unsigned chars with 12 entries, 99/8 = 12, each entry has 8 bits
+      unsigned char bitmap[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
 			FILE *fp;
-			fp = fopen("FS_FILE","w+");  // create a file that can be read and written
+			fp = fopen("FS_FILE","r+");  // create a file that can be read and written
 			/* Write data to the file */
       //go to the start of FS_FILE
       fseek(fp, 0, SEEK_SET);
       //write the magic number
-	    fwrite(&magic,4, 1, fp);
+	    fwrite(magic, sizeof(magic), 1, fp);
+      fwrite(bitmap,sizeof(bitmap),1,fp);
       //close the file
 			fclose(fp);
     }
