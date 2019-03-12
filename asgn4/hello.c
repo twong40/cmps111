@@ -33,8 +33,12 @@ static int hello_getattr(const char *path, struct stat *stbuf)
 {
 	printf( "getattr called\n" );
 	printf( "\tAttributes of %s requested\n", path );
-	int res = 0;
+	//set last access time and modification time to now
+	stbuf->st_atime = time( NULL );
+	stbuf->st_mtime = time( NULL );
+	printf("stat->st_mtime: %s\n",ctime(&stbuf->st_mtime));
 
+	int res = 0;
 	memset(stbuf, 0, sizeof(struct stat));
 	if (strcmp(path, "/") == 0) {
 		stbuf->st_mode = S_IFDIR | 0755;
