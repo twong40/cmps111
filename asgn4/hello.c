@@ -8,6 +8,16 @@
   gcc -Wall hello.c `pkg-config fuse --cflags --libs` -o hello
 */
 
+//links to understand FUSE
+//http://www.maastaar.net/fuse/linux/filesystem/c/2016/05/21/writing-a-simple-filesystem-using-fuse/
+//https://engineering.facile.it/blog/eng/write-filesystem-fuse/
+//links to understand read/write to binary
+//https://stackoverflow.com/questions/17598572/read-write-to-binary-files-in-c
+//https://www.tutorialspoint.com/c_standard_library/c_function_fread.htm
+//https://linux.die.net/man/3/fwrite
+//https://overiq.com/c-programming-101/fwrite-function-in-c/
+//link to hexdump
+//https://www.geeksforgeeks.org/hexdump-command-in-linux-with-examples/
 #define FUSE_USE_VERSION 26
 
 #include <fuse.h>
@@ -92,5 +102,6 @@ static struct fuse_operations hello_oper = {
 
 int main(int argc, char *argv[])
 {
+	printf("AOFS started on new directory\n")
 	return fuse_main(argc, argv, &hello_oper, NULL);
 }
