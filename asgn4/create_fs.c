@@ -29,7 +29,7 @@ int main(int argc, char *argv[])
 			//adds the magic number, backwards to make hexdump print correctly?
       int magic[4] = {0xfa19283e};
       //create bitmap of unsigned chars with 12 entries, 99/8 = 12, each entry has 8 bits
-      //a = 5(00000101), b = 9(00001001) 
+      //a = 5(00000101), b = 9(00001001)
       unsigned char bitmap[12];
       memset(bitmap, 0, sizeof(bitmap));
 			FILE *fp;

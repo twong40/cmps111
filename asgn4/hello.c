@@ -116,19 +116,59 @@ static struct fuse_operations hello_oper = {
 	.create = hello_create,
 };
 
-int find_space(){
+int find_block(){
 	//open the file
 	FILE *fp = fopen("FS_FILE", "r+");
 	//go the superblock after magic number
-	fseek(fp,4,SEEK_SET);
-
+	fseek(fp,16,SEEK_SET);
+	//set up the array
+	unsigned char bitmap[12];
+	//copy the bitmap into a temp to search through
+	fgets(bitmap,12,fp);
+	//go through each char
+	char byte;
+	int found = 0;
+	int free_block = 100;
+	for(int i = 0; i < 12; i++){
+		//for each, check where the first free block is
+		byte = bitmap[i];
+		//go through each bit to look for the first 0, starting at left most bit
+		//example: byte = 11101100
+		for(int j = 7; j >= 0; j--){
+			//check if that bit shifted by j is 1
+			if(!((byte >> j) & 0x01)){
+				//if it is, then flip that bit to 1
+				byte ^= 1 << j;
+				//save that new byte into the bitmap
+				bitmap[i] = byte;
+				//indicate that we have found the space
+				found = 1;
+				//rememeber the free block
+				//add 1 to i since we started at 0, 8 -j because we need to find which bit
+				free_block = (i+1) * (8-j);
+				//exit inner loop
+				break;
+			}
+			//if it is not 1, then go to the next bit
+		}
+		//if we found the open space, then we can exit going through the bitmap
+		if(found) break;
+		//else go to the next byte
+	}
+	//write the new bitmap into the file
+	//go the superblock after magic number
+	fseek(fp,16,SEEK_SET);
+	//write the new metadata
+  fwrite(bitmap,sizeof(bitmap),1,fp);
+	//close file
 	fclose(fp);
-	return 0;
+	return free_block;
 }
 
 int main(int argc, char *argv[])
 {
 	printf("AOFS started on new directory\n");
-	find_space();
+	int i = find_block();
+	printf("%d is the first free block\n", i);
 	return fuse_main(argc, argv, &hello_oper, NULL);
 }
