@@ -27,7 +27,7 @@ int main(int argc, char *argv[])
       printf("the file has %ld bytes\n", (long) st.st_size);
       close(file_descriptor);
 			//adds the magic number, backwards to make hexdump print correctly?
-      int magic[4] = {0x3e2819fa};
+      int magic[4] = {0xfa19283e};
       //create bitmap of unsigned chars with 12 entries, 99/8 = 12, each entry has 8 bits
       unsigned char bitmap[99];
       memset(bitmap, 0, sizeof(bitmap));
