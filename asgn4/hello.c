@@ -164,11 +164,53 @@ int find_block(){
 	fclose(fp);
 	return free_block;
 }
+//go through all the used blocks and find the entry containging the metadata needed
+char* find_block_data(const char *path){
+	char meta[50];
+	int offset;
+	//open the file
+	FILE *fp = fopen("FS_FILE", "r+");
+	//go the superblock after magic number
+	fseek(fp,16,SEEK_SET);
+	//set up the array
+	unsigned char bitmap[12];
+	//copy the bitmap into a temp to search through
+	fgets(bitmap,12,fp);
+	//go through each char
+	char byte;
+	for(int i = 0; i < 12; i++){
+		//for each, check where the first free block is
+		byte = bitmap[i];
+		//go through each bit to look for the first 0, starting at left most bit
+		//example: byte = 11101100
+		for(int j = 7; j >= 0; j--){
+			//check if that bit shifted by j is 1
+			if(!((byte >> j) & 0x01)){
+				//if it is, then flip that bit to 1
+				byte ^= 1 << j;
+				//save that new byte into the bitmap
+				bitmap[i] = byte;
+				//go to that location and copy 50 bytes of metadata into meta;
+				offset = (i+1) * (8-j);
+				//go to the used block
+				fseek(fp,(offset*1024*4),SEEK_SET);
+				fgets(meta,50,fp);
+				//check if this is the correct file and return if it is
+				//I DONT KNOW WHAT ELSE TO ADD HERE???
+				//exit inner loop
+				break;
+			}
+			//if it is not 1, then go to the next bit
+		}
+		//else go to the next byte
+	}
+	//close file
+	fclose(fp);
+	return strdup(meta);
+}
 
 int main(int argc, char *argv[])
 {
 	printf("AOFS started on new directory\n");
-	int i = find_block();
-	printf("%d is the first free block\n", i);
 	return fuse_main(argc, argv, &hello_oper, NULL);
 }
