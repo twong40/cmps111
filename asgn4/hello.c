@@ -35,7 +35,7 @@ static int hello_getattr(const char *path, struct stat *stbuf)
 	printf( "\tAttributes of %s requested\n", path );
 	//set last access time and modification time to now
 	stbuf->st_atime = time( NULL );
-	stbuf->st_mtime = time( NULL );
+	stbuf->st_mtime  = time( NULL );
 	printf("stat->st_mtime: %s\n",ctime(&stbuf->st_mtime));
 
 	int res = 0;
@@ -58,7 +58,7 @@ static int hello_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 {
 	(void) offset;
 	(void) fi;
-
+	printf( "readdir called\n" );
 	if (strcmp(path, "/") != 0)
 		return -ENOENT;
 
@@ -71,11 +71,12 @@ static int hello_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 static int hello_open(const char *path, struct fuse_file_info *fi)
 {
+		printf( "open called\n" );
 	if (strcmp(path, hello_path) != 0)
 		return -ENOENT;
 
-	if ((fi->flags & 3) != O_RDONLY)
-		return -EACCES;
+	// if ((fi->flags & 3) != O_RDONLY)
+	// 	return -EACCES;
 
 	return 0;
 }
@@ -85,6 +86,7 @@ static int hello_read(const char *path, char *buf, size_t size, off_t offset,
 {
 	size_t len;
 	(void) fi;
+	printf( "read called\n" );
 	if(strcmp(path, hello_path) != 0)
 		return -ENOENT;
 
@@ -99,15 +101,34 @@ static int hello_read(const char *path, char *buf, size_t size, off_t offset,
 	return size;
 }
 
+static int hello_create(const char *path, mode_t mode, struct fuse_file_info *fi){
+	printf( "create called\n" );
+	if (open(path, fi->flags, mode) == -1){
+		return -errno;
+	}
+	return 0;
+}
 static struct fuse_operations hello_oper = {
 	.getattr	= hello_getattr,
 	.readdir	= hello_readdir,
 	.open		= hello_open,
 	.read		= hello_read,
+	.create = hello_create,
 };
+
+int find_space(){
+	//open the file
+	FILE *fp = fopen("FS_FILE", "r+");
+	//go the superblock after magic number
+	fseek(fp,4,SEEK_SET);
+
+	fclose(fp);
+	return 0;
+}
 
 int main(int argc, char *argv[])
 {
 	printf("AOFS started on new directory\n");
+	find_space();
 	return fuse_main(argc, argv, &hello_oper, NULL);
 }

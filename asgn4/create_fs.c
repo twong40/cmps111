@@ -29,7 +29,8 @@ int main(int argc, char *argv[])
 			//adds the magic number, backwards to make hexdump print correctly?
       int magic[4] = {0x3e2819fa};
       //create bitmap of unsigned chars with 12 entries, 99/8 = 12, each entry has 8 bits
-      unsigned char bitmap[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
+      unsigned char bitmap[99];
+      memset(bitmap, 0, sizeof(bitmap));
 			FILE *fp;
 			fp = fopen("FS_FILE","r+");  // create a file that can be read and written
 			/* Write data to the file */
