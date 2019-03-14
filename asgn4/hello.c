@@ -103,7 +103,10 @@ static int hello_getattr(const char *path, struct stat *stbuf)
 		res = -ENOENT;
 	//find the data in our FS_FILE
 	//buffers for gathering data
-	FILE * fp = ("FS_FILE", "w+");
+	FILE *fp = fopen("FS_FILE", "r+");
+	if(fp == NULL|| fp == -1){
+		printf("PPLS\n");
+	}
 	unsigned char * name[50];
 	unsigned char * _time[50];
 	memset(name,0,sizeof(name));
@@ -113,9 +116,9 @@ static int hello_getattr(const char *path, struct stat *stbuf)
 		printf("HERE at %d\n",i);
 		//go to the start of that block
 		printf("SEEK at %d\n",i);
-		fseek(fp,i*4096,SEEK_SET);
+		fseek(fp,i*1024*4,SEEK_SET);
 		//get the name of the path into the buffer
-		fread(name,sizeof(name),1,fp);
+		fread(name,sizeof(name),1	,fp);
 		printf("READ at %d\n",i);
 		//now check if that equals the path in our parameter
 		if(strcmp(path,name) == 0){
@@ -124,7 +127,7 @@ static int hello_getattr(const char *path, struct stat *stbuf)
 			printf("SECOND READ at %d\n",i);
 			fread(_time,sizeof(_time),1,fp);
 			//get the meta data for time after name
-			//long int time = (long int)atoi(_time);
+			long int time = (long int)atoi(_time);
 			//fill out the stats buffers
 			stbuf->st_mode = S_IFREG | 0777;
 			stbuf->st_nlink = 1;
@@ -132,6 +135,7 @@ static int hello_getattr(const char *path, struct stat *stbuf)
 			return 0;
 		}
 	}
+	fclose(fp);
 	return res;
 }
 
