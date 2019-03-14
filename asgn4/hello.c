@@ -29,10 +29,61 @@
 static const char *hello_str = "Hello World!\n";
 static const char *hello_path = "/hello";
 
+int find_block(){
+	//open the file
+	FILE *fp = fopen("FS_FILE", "r+");
+	//go the superblock after magic number
+	fseek(fp,16,SEEK_SET);
+	//set up the array
+	unsigned char bitmap[13];
+	//copy the bitmap into a temp to search through
+	fgets(bitmap,13,fp);
+	//go through each char
+	char byte;
+	int found = 0;
+	int free_block = 100;
+	for(int i = 0; i < 13; i++){
+		//for each, check where the first free block is
+		byte = bitmap[i];
+		//go through each bit to look for the first 0, starting at left most bit
+		//example: byte = 11101100
+		for(int j = 7; j >= 0; j--){
+			//check if that bit shifted by j is 1
+			if(!((byte >> j) & 0x01)){
+				//if it is, then flip that bit to 1
+				byte ^= 1 << j;
+				//save that new byte into the bitmap
+				bitmap[i] = byte;
+				//indicate that we have found the space
+				found = 1;
+				//rememeber the free block
+				//add 1 to i since we started at 0, 8 -j because we need to find which bit
+				free_block = (i+1) * (8-j);
+				printf("the free block is %d", free_block);
+				//exit inner loop
+				break;
+			}
+			//if it is not 1, then go to the next bit
+		}
+		//if we found the open space, then we can exit going through the bitmap
+		if(found) break;
+		//else go to the next byte
+	}
+	//write the new bitmap into the file
+	//go the superblock after magic number
+	fseek(fp,16,SEEK_SET);
+	//write the new metadata
+  fwrite(bitmap,sizeof(bitmap),1,fp);
+	//close file
+	fclose(fp);
+	return free_block;
+}
 static int hello_getattr(const char *path, struct stat *stbuf)
 {
 	printf( "getattr called\n" );
 	printf( "\tAttributes of %s requested\n", path );
+	stbuf->st_uid = getuid();
+	stbuf->st_gid = getgid();
 	//set last access time and modification time to now
 	stbuf->st_atime = time( NULL );
 	stbuf->st_mtime  = time( NULL );
@@ -41,15 +92,46 @@ static int hello_getattr(const char *path, struct stat *stbuf)
 	int res = 0;
 	memset(stbuf, 0, sizeof(struct stat));
 	if (strcmp(path, "/") == 0) {
-		stbuf->st_mode = S_IFDIR | 0755;
+		stbuf->st_mode = S_IFDIR | 0777;
 		stbuf->st_nlink = 2;
-	} else if (strcmp(path, hello_path) == 0) {
-		stbuf->st_mode = S_IFREG | 0444;
+	}
+	else if (strcmp(path, hello_path) == 0) {
+		stbuf->st_mode = S_IFREG | 0777;
 		stbuf->st_nlink = 1;
 		stbuf->st_size = strlen(hello_str);
 	} else
 		res = -ENOENT;
-
+	//find the data in our FS_FILE
+	//buffers for gathering data
+	FILE * fp = ("FS_FILE", "w+");
+	unsigned char * name[50];
+	unsigned char * _time[50];
+	memset(name,0,sizeof(name));
+	memset(_time,0,sizeof(_time));
+	//we have 99 blocks to go through
+	for(int i = 1;i< 100; i ++){
+		printf("HERE at %d\n",i);
+		//go to the start of that block
+		printf("SEEK at %d\n",i);
+		fseek(fp,i*4096,SEEK_SET);
+		//get the name of the path into the buffer
+		fread(name,sizeof(name),1,fp);
+		printf("READ at %d\n",i);
+		//now check if that equals the path in our parameter
+		if(strcmp(path,name) == 0){
+			printf("FOUND at %d\n",i);
+			//this is the correct path/name in our FS_FILE
+			printf("SECOND READ at %d\n",i);
+			fread(_time,sizeof(_time),1,fp);
+			//get the meta data for time after name
+			//long int time = (long int)atoi(_time);
+			//fill out the stats buffers
+			stbuf->st_mode = S_IFREG | 0777;
+			stbuf->st_nlink = 1;
+			stbuf->st_size = 0;
+			return 0;
+		}
+	}
 	return res;
 }
 
@@ -102,11 +184,77 @@ static int hello_read(const char *path, char *buf, size_t size, off_t offset,
 }
 
 static int hello_create(const char *path, mode_t mode, struct fuse_file_info *fi){
-	printf( "create called\n" );
-	if (open(path, fi->flags, mode) == -1){
+	printf( "create called on path %s\n", path );
+	FILE* created = fopen(path, "r+");
+	if (created == NULL) {
+    perror("fopen");
+	}
+	fclose(created);
+	//need to store the name and time of access
+	int fd;
+	unsigned char* name[50];
+	memset(name, 0, sizeof(name));
+	unsigned char* _time[50];
+	memset(_time,0,sizeof(_time));
+	//open the file/create it
+	if ( (fd = open(path, fi->flags, mode ) )== -1){
 		return -errno;
 	}
+	fi->fh = fd;
+	FILE *fp = fopen(path,"r+");
+	//get the block number it is now saved onto
+	int offset = find_block();
+	strcpy(name,path);
+	/* Write data to the file */
+	//go to the start of FS_FILE + the block number
+	printf("%d is the block number, %d is the byte number\n",offset,(offset * 4096));
+	fseek(fp, (offset*4096), SEEK_SET);
+	fwrite(name, 50, 1, fp);
+	// fwrite(time,50,1,fp);
+	close();
 	return 0;
+}
+
+static int hello_truncate(const char * path, off_t size, struct fuse_file_info *fi){
+	//Shrink or enlarge a file
+	int result;
+	if (fi != NULL) result = ftruncate(fi->fh, size);
+  else result = truncate(path, size);
+  if (result == -1)  return -errno;
+	return 0;
+}
+
+static int hello_utimens(const char * path, const struct timespec ts[2], struct fuse_file_info *fi){
+	//Set access and modification time, with nanosecond resolution.
+	(void) fi;
+	int result;
+	result = utimensat(0, path, ts, AT_SYMLINK_NOFOLLOW);
+	if(result == -1) return -errno;
+	return 0;
+}
+static int hello_chown(const char * path, uid_t uid, gid_t gid, struct fuse_file_info *fi){
+	//Change the owner of a file or directory
+	(void) fi;
+	int result;
+	result = lchown(path,uid,gid);
+	if(result == -1) return -errno;
+	return 0;
+}
+static int hello_mknod(const char *path, mode_t mode, dev_t rdev)
+{
+        int result;
+        if (S_ISREG(mode)) {
+          result = open(path, O_CREAT | O_EXCL | O_WRONLY, mode);
+          if (result >= 0)
+            result = close(result);
+        }
+				else if (S_ISFIFO(mode))
+            result = mkfifo(path, mode);
+        else
+            result = mknod(path, mode, rdev);
+        if (result == -1)
+                return -errno;
+        return 0;
 }
 static struct fuse_operations hello_oper = {
 	.getattr	= hello_getattr,
@@ -114,100 +262,11 @@ static struct fuse_operations hello_oper = {
 	.open		= hello_open,
 	.read		= hello_read,
 	.create = hello_create,
+	.chown = hello_chown,
+	.truncate = hello_truncate,
+	.utimens = hello_utimens,
+	.mknod = hello_mknod,
 };
-
-int find_block(){
-	//open the file
-	FILE *fp = fopen("FS_FILE", "r+");
-	//go the superblock after magic number
-	fseek(fp,16,SEEK_SET);
-	//set up the array
-	unsigned char bitmap[12];
-	//copy the bitmap into a temp to search through
-	fgets(bitmap,12,fp);
-	//go through each char
-	char byte;
-	int found = 0;
-	int free_block = 100;
-	for(int i = 0; i < 12; i++){
-		//for each, check where the first free block is
-		byte = bitmap[i];
-		//go through each bit to look for the first 0, starting at left most bit
-		//example: byte = 11101100
-		for(int j = 7; j >= 0; j--){
-			//check if that bit shifted by j is 1
-			if(!((byte >> j) & 0x01)){
-				//if it is, then flip that bit to 1
-				byte ^= 1 << j;
-				//save that new byte into the bitmap
-				bitmap[i] = byte;
-				//indicate that we have found the space
-				found = 1;
-				//rememeber the free block
-				//add 1 to i since we started at 0, 8 -j because we need to find which bit
-				free_block = (i+1) * (8-j);
-				//exit inner loop
-				break;
-			}
-			//if it is not 1, then go to the next bit
-		}
-		//if we found the open space, then we can exit going through the bitmap
-		if(found) break;
-		//else go to the next byte
-	}
-	//write the new bitmap into the file
-	//go the superblock after magic number
-	fseek(fp,16,SEEK_SET);
-	//write the new metadata
-  fwrite(bitmap,sizeof(bitmap),1,fp);
-	//close file
-	fclose(fp);
-	return free_block;
-}
-//go through all the used blocks and find the entry containging the metadata needed
-char* find_block_data(const char *path){
-	char meta[50];
-	int offset;
-	//open the file
-	FILE *fp = fopen("FS_FILE", "r+");
-	//go the superblock after magic number
-	fseek(fp,16,SEEK_SET);
-	//set up the array
-	unsigned char bitmap[12];
-	//copy the bitmap into a temp to search through
-	fgets(bitmap,12,fp);
-	//go through each char
-	char byte;
-	for(int i = 0; i < 12; i++){
-		//for each, check where the first free block is
-		byte = bitmap[i];
-		//go through each bit to look for the first 0, starting at left most bit
-		//example: byte = 11101100
-		for(int j = 7; j >= 0; j--){
-			//check if that bit shifted by j is 1
-			if(!((byte >> j) & 0x01)){
-				//if it is, then flip that bit to 1
-				byte ^= 1 << j;
-				//save that new byte into the bitmap
-				bitmap[i] = byte;
-				//go to that location and copy 50 bytes of metadata into meta;
-				offset = (i+1) * (8-j);
-				//go to the used block
-				fseek(fp,(offset*1024*4),SEEK_SET);
-				fgets(meta,50,fp);
-				//check if this is the correct file and return if it is
-				//I DONT KNOW WHAT ELSE TO ADD HERE???
-				//exit inner loop
-				break;
-			}
-			//if it is not 1, then go to the next bit
-		}
-		//else go to the next byte
-	}
-	//close file
-	fclose(fp);
-	return strdup(meta);
-}
 
 int main(int argc, char *argv[])
 {
