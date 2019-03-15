@@ -1,4 +1,4 @@
-#define FUSE_USE_VERSION 26
+ #define FUSE_USE_VERSION 26
 
 #include <fuse.h>
 #include <stdio.h>
@@ -61,10 +61,10 @@ static int hello_getattr(const char *path, struct stat *stbuf,  struct fuse_file
                 stbuf->st_size = strlen(hello_str);
         } else{
             //create file
-            printf("else condition \n");        
+            printf("else condition \n");
             res = -ENOENT;
         }
-        //I'm assuming we return 0 if res exists 
+        //I'm assuming we return 0 if res exists
         return res;
 }
 
@@ -99,7 +99,7 @@ static int hello_open(const char *path, struct fuse_file_info *fi)
 //I think it reads the file?
 static int hello_read(const char *path, char *buf, size_t size, off_t offset,
                       struct fuse_file_info *fi)
-{        
+{
         //buf is what we put in to display current directory
         printf("hello_read\n");
         printf("path : %s\n", path);
@@ -135,9 +135,9 @@ static int hello_write(const char *path, char *buf, size_t size, off_t offset,
     fclose(fd);
     return pwrite(fi->fh, buf, size, offset);
 }
-    
+
 int allocate_space(){
-    
+
     FILE *fp = fopen("FS_FILE", "r+");
     int max = 10, bitmap_starting_location = 0,  i, j = 0, counter = 0, flag = 0;;
     char arr[max];
@@ -193,7 +193,7 @@ static struct fuse_operations hello_oper = {
         .readdir        = hello_readdir,
         .open           = hello_open,
         .read           = hello_read,
-        .write          = hello_write, 
+        .write          = hello_write,
         .create         = hello_create,
 };
 int main(int argc, char *argv[])
