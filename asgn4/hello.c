@@ -189,7 +189,7 @@ static int hello_read(const char *path, char *buf, size_t size, off_t offset,
 
 static int hello_create(const char *path, mode_t mode, struct fuse_file_info *fi){
 	printf( "create called on path %s\n", path );
-	int file_descriptor = open(path, O_RDWR| O_CREAT, S_IRWXU);
+	int file_descriptor = open("FS_FILE", O_RDWR| O_CREAT, S_IRWXU);
 	//need to store the name and time of access
 	int fd;
 	unsigned char* name[50];
