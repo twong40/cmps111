@@ -113,18 +113,18 @@ static int hello_getattr(const char *path, struct stat *stbuf)
 	memset(_time,0,sizeof(_time));
 	//we have 99 blocks to go through
 	for(int i = 1;i< 100; i ++){
-		printf("HERE at %d\n",i);
+		//printf("HERE at %d\n",i);
 		//go to the start of that block
-		printf("SEEK at %d\n",i);
+		//printf("SEEK at %d\n",i);
 		fseek(fp,i*1024*4,SEEK_SET);
 		//get the name of the path into the buffer
 		fread(name,sizeof(name),1	,fp);
-		printf("READ at %d\n",i);
+		//printf("READ at %d\n",i);
 		//now check if that equals the path in our parameter
 		if(strcmp(path,name) == 0){
-			printf("FOUND at %d\n",i);
+		  //printf("FOUND at %d\n",i);
 			//this is the correct path/name in our FS_FILE
-			printf("SECOND READ at %d\n",i);
+			//printf("SECOND READ at %d\n",i);
 			fread(_time,sizeof(_time),1,fp);
 			//get the meta data for time after name
 			long int time = (long int)atoi(_time);
@@ -189,11 +189,7 @@ static int hello_read(const char *path, char *buf, size_t size, off_t offset,
 
 static int hello_create(const char *path, mode_t mode, struct fuse_file_info *fi){
 	printf( "create called on path %s\n", path );
-	FILE* created = fopen(path, "r+");
-	if (created == NULL) {
-    perror("fopen");
-	}
-	fclose(created);
+	int file_descriptor = open(path, O_RDWR| O_CREAT, S_IRWXU);
 	//need to store the name and time of access
 	int fd;
 	unsigned char* name[50];
@@ -275,5 +271,10 @@ static struct fuse_operations hello_oper = {
 int main(int argc, char *argv[])
 {
 	printf("AOFS started on new directory\n");
+	FILE *fp = fopen("FS_FILE","r+");
+	fseek(fp,4096,SEEK_SET);
+	char buf[50] = "TEST";
+	fwrite(buf,sizeof(buf),1,fp);
+	fclose(fp);
 	return fuse_main(argc, argv, &hello_oper, NULL);
 }
